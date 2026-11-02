@@ -16,7 +16,9 @@
   nav button.active { background:var(--red); color:#fff; border-color:var(--red); }
   main { padding:14px 16px; max-width:720px; margin:0 auto; }
   .card { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
-  .card img.cover { width:100%; display:block; aspect-ratio:4/5; object-fit:cover; background:#000; cursor:pointer; }
+  .card .thumb { position:relative; cursor:pointer; }
+  .card img.cover { width:100%; display:block; aspect-ratio:4/5; object-fit:cover; background:#000; }
+  .card .slide-badge { position:absolute; right:10px; bottom:10px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; padding:4px 10px; border-radius:14px; backdrop-filter:blur(2px); pointer-events:none; }
   .card .body { padding:12px 14px; }
   .badge { display:inline-block; background:var(--card2); color:var(--muted); font-size:11px; padding:2px 8px; border-radius:10px; margin-right:6px; }
   .headline { font-weight:700; margin:8px 0 4px; font-size:16px; }
@@ -33,8 +35,15 @@
   #modal { max-width:640px; margin:30px auto; background:var(--card); border-radius:12px; overflow:hidden; }
   #modal .close { position:sticky; top:0; text-align:right; padding:8px 14px; background:var(--card); }
   #modal .close button { background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; }
-  #modal .slides { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; }
+  #modal .close { display:flex; align-items:center; justify-content:space-between; }
+  #modal .slide-counter { color:var(--muted); font-size:13px; padding-left:4px; }
+  #modal .slide-nav { position:relative; }
+  #modal .slides { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; }
+  #modal .slides::-webkit-scrollbar { display:none; }
   #modal .slides img { width:100%; flex:0 0 100%; scroll-snap-align:start; display:block; }
+  #modal .nav-btn { position:absolute; top:50%; transform:translateY(-50%); width:38px; height:38px; border-radius:50%; border:none; background:rgba(0,0,0,.55); color:#fff; font-size:20px; cursor:pointer; z-index:5; display:flex; align-items:center; justify-content:center; }
+  #modal .nav-btn:disabled { opacity:.3; cursor:default; }
+  #modal #nav-prev { left:10px; } #modal #nav-next { right:10px; }
   .idea-row { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; }
   .idea-row textarea { width:100%; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px; font:inherit; resize:vertical; }
   .idea-add { display:flex; gap:8px; margin-bottom:16px; }
@@ -147,10 +156,12 @@ function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleString('en-GB', {
 
 function postCard(p) {
   const d = document.createElement('div'); d.className = 'card';
+  const thumb = document.createElement('div'); thumb.className = 'thumb'; thumb.onclick = () => openModal(p);
   const img = document.createElement('img'); img.className = 'cover'; img.loading = 'lazy';
   img.src = getApi() + '/api/image/' + p.id + '/0?token=' + encodeURIComponent(getToken());
-  img.onclick = () => openModal(p);
-  d.appendChild(img);
+  thumb.appendChild(img);
+  if (p.slides > 1) { const b = document.createElement('span'); b.className = 'slide-badge'; b.textContent = `🖼 ${p.slides} slides — tap to view all`; thumb.appendChild(b); }
+  d.appendChild(thumb);
   const body = document.createElement('div'); body.className = 'body';
   body.innerHTML = `
     <span class="badge">#${p.id}</span><span class="badge">${CAT_LABEL[p.category] || p.category || ''}</span>
@@ -202,15 +213,20 @@ async function doAction(postId, action, btn, when) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
+let modalSlide = 0, modalCount = 0;
 async function openModal(p) {
   const full = await api('/api/posts/' + p.id).catch(() => null);
   const n = full ? full.slideCount : p.slides;
+  modalSlide = 0; modalCount = n;
   const modal = document.getElementById('modal');
   let slidesHtml = '';
   for (let i = 0; i < n; i++) slidesHtml += `<img src="${getApi()}/api/image/${p.id}/${i}?token=${encodeURIComponent(getToken())}">`;
   modal.innerHTML = `
-    <div class="close"><button onclick="closeModal()">✕</button></div>
-    <div class="slides">${slidesHtml}</div>
+    <div class="close"><span class="slide-counter" id="slide-counter">1 / ${n}</span><button onclick="closeModal()">✕</button></div>
+    <div class="slide-nav">
+      ${n > 1 ? `<button class="nav-btn" id="nav-prev" onclick="modalGo(-1)" disabled>‹</button><button class="nav-btn" id="nav-next" onclick="modalGo(1)">›</button>` : ''}
+      <div class="slides" id="modal-slides">${slidesHtml}</div>
+    </div>
     <div class="body">
       <div class="headline">${esc(p.headline)}</div>
       <div class="caption">${esc(full && full.spec ? full.spec.caption : p.caption)}</div>
@@ -218,8 +234,33 @@ async function openModal(p) {
     </div>
   `;
   document.getElementById('modal-bg').classList.add('open');
+  document.getElementById('modal-slides').addEventListener('scroll', onModalScroll);
+  document.addEventListener('keydown', onModalKey);
 }
-function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+function onModalScroll() {
+  const el = document.getElementById('modal-slides'); if (!el) return;
+  const i = Math.round(el.scrollLeft / el.clientWidth);
+  if (i !== modalSlide) { modalSlide = i; updateModalNav(); }
+}
+function onModalKey(e) {
+  if (!document.getElementById('modal-bg').classList.contains('open')) return;
+  if (e.key === 'ArrowLeft') modalGo(-1);
+  else if (e.key === 'ArrowRight') modalGo(1);
+  else if (e.key === 'Escape') closeModal();
+}
+function modalGo(dir) {
+  const el = document.getElementById('modal-slides'); if (!el) return;
+  modalSlide = Math.max(0, Math.min(modalCount - 1, modalSlide + dir));
+  el.scrollTo({ left: modalSlide * el.clientWidth, behavior: 'smooth' });
+  updateModalNav();
+}
+function updateModalNav() {
+  const c = document.getElementById('slide-counter'); if (c) c.textContent = (modalSlide + 1) + ' / ' + modalCount;
+  const prev = document.getElementById('nav-prev'), next = document.getElementById('nav-next');
+  if (prev) prev.disabled = modalSlide === 0;
+  if (next) next.disabled = modalSlide === modalCount - 1;
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); document.removeEventListener('keydown', onModalKey); }
 
 async function renderIdeas() {
   const main = document.getElementById('main');
