@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autologist Dashboard</title>
+<style>
+  :root { --bg:#0b0c0f; --card:#16181d; --card2:#1d2027; --red:#E10600; --text:#f2f2f2; --muted:#9aa0ab; --border:#2a2d35; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Cairo,sans-serif; padding-bottom:60px; }
+  header { position:sticky; top:0; background:var(--bg); z-index:10; padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  header h1 { font-size:18px; margin:0; } header h1 span { color:var(--red); }
+  #gear { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; }
+  nav { display:flex; gap:6px; padding:10px 16px; overflow-x:auto; border-bottom:1px solid var(--border); }
+  nav button { background:var(--card); border:1px solid var(--border); color:var(--muted); padding:7px 14px; border-radius:20px; font-size:13px; cursor:pointer; white-space:nowrap; }
+  nav button.active { background:var(--red); color:#fff; border-color:var(--red); }
+  main { padding:14px 16px; max-width:720px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
+  .card img.cover { width:100%; display:block; aspect-ratio:4/5; object-fit:cover; background:#000; cursor:pointer; }
+  .card .body { padding:12px 14px; }
+  .badge { display:inline-block; background:var(--card2); color:var(--muted); font-size:11px; padding:2px 8px; border-radius:10px; margin-right:6px; }
+  .headline { font-weight:700; margin:8px 0 4px; font-size:16px; }
+  .caption { color:var(--muted); font-size:13px; white-space:pre-wrap; margin:6px 0; }
+  .warn { color:#f5a623; font-size:12px; margin:4px 0; }
+  .meta { color:var(--muted); font-size:12px; margin-top:4px; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; padding:0 14px 14px; }
+  .actions button { flex:1 1 auto; min-width:90px; background:var(--card2); border:1px solid var(--border); color:var(--text); padding:9px; border-radius:8px; font-size:13px; cursor:pointer; }
+  .actions button.primary { background:var(--red); border-color:var(--red); color:#fff; }
+  .actions button:disabled { opacity:.5; }
+  .empty { color:var(--muted); text-align:center; padding:40px 0; }
+  #modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; z-index:100; overflow-y:auto; }
+  #modal-bg.open { display:block; }
+  #modal { max-width:640px; margin:30px auto; background:var(--card); border-radius:12px; overflow:hidden; }
+  #modal .close { position:sticky; top:0; text-align:right; padding:8px 14px; background:var(--card); }
+  #modal .close button { background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; }
+  #modal .slides { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; }
+  #modal .slides img { width:100%; flex:0 0 100%; scroll-snap-align:start; display:block; }
+  .idea-row { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .idea-row textarea { width:100%; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px; font:inherit; resize:vertical; }
+  .idea-add { display:flex; gap:8px; margin-bottom:16px; }
+  .idea-add textarea { flex:1; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px; font:inherit; min-height:44px; }
+  .idea-add button { background:var(--red); border:none; color:#fff; border-radius:8px; padding:0 18px; cursor:pointer; }
+  #setup { max-width:420px; margin:80px auto; padding:0 16px; }
+  #setup input { width:100%; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px; margin:6px 0 14px; font:inherit; }
+  #setup label { font-size:13px; color:var(--muted); }
+  #setup button { width:100%; background:var(--red); border:none; color:#fff; padding:12px; border-radius:8px; font-size:15px; cursor:pointer; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--card2); border:1px solid var(--border); padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div id="setup" style="display:none">
+  <h2>Autologist Dashboard</h2>
+  <p style="color:var(--muted)">Enter the dashboard API URL and your access token (from the server's <code>.env</code>).</p>
+  <label>API base URL</label>
+  <input id="setup-api" placeholder="https://84.8.218.212.nip.io">
+  <label>Access token</label>
+  <input id="setup-token" type="password" placeholder="paste token">
+  <button onclick="saveSetup()">Connect</button>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>Auto<span>logist</span> Dashboard</h1>
+    <button id="gear" onclick="showSetup()">⚙</button>
+  </header>
+  <nav id="tabs"></nav>
+  <main id="main"></main>
+</div>
+
+<div id="modal-bg" onclick="if(event.target===this) closeModal()">
+  <div id="modal"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+const TABS = [
+  { key:'review', label:'Review' },
+  { key:'scheduled', label:'Scheduled' },
+  { key:'posted', label:'Posted' },
+  { key:'failed', label:'Failed' },
+  { key:'archived', label:'Archived' },
+  { key:'ideas', label:'Ideas' },
+];
+let state = { tab:'review' };
+
+function getApi() { return localStorage.getItem('al_api') || ''; }
+function getToken() { return localStorage.getItem('al_token') || ''; }
+
+function showSetup() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('setup').style.display = 'block';
+  document.getElementById('setup-api').value = getApi();
+  document.getElementById('setup-token').value = getToken();
+}
+function saveSetup() {
+  const api = document.getElementById('setup-api').value.trim().replace(/\/$/, '');
+  const token = document.getElementById('setup-token').value.trim();
+  if (!api || !token) return toast('Fill both fields');
+  localStorage.setItem('al_api', api);
+  localStorage.setItem('al_token', token);
+  boot();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(getApi() + path, {
+    ...opts,
+    headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (res.status === 401) { toast('Unauthorized — check your token'); showSetup(); throw new Error('unauthorized'); }
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+  return res.status === 204 ? null : res.json();
+}
+
+function renderTabs() {
+  const nav = document.getElementById('tabs'); nav.innerHTML = '';
+  for (const t of TABS) {
+    const b = document.createElement('button');
+    b.textContent = t.label; b.className = t.key === state.tab ? 'active' : '';
+    b.onclick = () => { state.tab = t.key; renderTabs(); loadTab(); };
+    nav.appendChild(b);
+  }
+}
+
+const CAT_LABEL = { f1:'🏎️ F1', f1_theory:'🕵️ F1 theory', wrc:'🌲 WRC', endurance:'⏱️ Endurance', rally_raid:'🏜️ Rally-raid',
+  motorsport:'🏁 Motorsport', egypt_prices:'💰 Egypt prices', egypt_launch:'🚗 Egypt launch', egypt_policy:'📜 Egypt policy',
+  fuel:'⛽ Fuel', comparison:'⚖️ Comparison', global:'🌍 Global', tech_tip:'🔧 Tech tip' };
+
+async function loadTab() {
+  const main = document.getElementById('main'); main.innerHTML = '<div class="empty">Loading…</div>';
+  if (state.tab === 'ideas') return renderIdeas();
+  try {
+    const posts = await api('/api/posts?status=' + state.tab);
+    if (!posts.length) { main.innerHTML = '<div class="empty">Nothing here.</div>'; return; }
+    main.innerHTML = '';
+    for (const p of posts) main.appendChild(postCard(p));
+  } catch (e) { main.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleString('en-GB', { weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : ''; }
+
+function postCard(p) {
+  const d = document.createElement('div'); d.className = 'card';
+  const img = document.createElement('img'); img.className = 'cover'; img.loading = 'lazy';
+  img.src = getApi() + '/api/image/' + p.id + '/0?token=' + encodeURIComponent(getToken());
+  img.onclick = () => openModal(p);
+  d.appendChild(img);
+  const body = document.createElement('div'); body.className = 'body';
+  body.innerHTML = `
+    <span class="badge">#${p.id}</span><span class="badge">${CAT_LABEL[p.category] || p.category || ''}</span>
+    <div class="headline">${esc(p.headline)}</div>
+    <div class="caption">${esc(p.caption)}${p.caption.length >= 220 ? '…' : ''}</div>
+    ${p.problems.length ? `<div class="warn">⚠️ ${esc(p.problems.slice(0,2).join(' / '))}</div>` : ''}
+    ${p.photo_gaps.length ? `<div class="warn">🖼 No photo: ${esc(p.photo_gaps.join(', '))}</div>` : ''}
+    ${p.doubts ? `<div class="warn">❓ ${esc(p.doubts)}</div>` : ''}
+    <div class="meta">${p.publish_at ? '🗓 ' + fmtDate(p.publish_at) : fmtDate(p.created)} · v${p.version} · ${p.slides} slides</div>
+  `;
+  d.appendChild(body);
+  if (['review','failed'].includes(p.status)) {
+    const act = document.createElement('div'); act.className = 'actions';
+    act.innerHTML = `
+      <button class="primary" data-a="post">📤 Post it</button>
+      <button data-a="ok">🚀 Post now</button>
+      <button data-a="when">⏰ Pick time</button>
+      <button data-a="pics">🖼 New photos</button>
+      <button data-a="redo">🔄 Rewrite</button>
+      <button data-a="arch">🗄 Archive</button>
+      <button data-a="skip">🗑 Cancel</button>
+    `;
+    act.querySelectorAll('button').forEach(b => b.onclick = () => doAction(p.id, b.dataset.a, b));
+    d.appendChild(act);
+  } else if (p.status === 'scheduled') {
+    const act = document.createElement('div'); act.className = 'actions';
+    act.innerHTML = `<button class="primary" data-a="ok">🚀 Post now</button><button data-a="arch">🗄 Archive</button>`;
+    act.querySelectorAll('button').forEach(b => b.onclick = () => doAction(p.id, b.dataset.a, b));
+    d.appendChild(act);
+  }
+  return d;
+}
+
+async function doAction(postId, action, btn, when) {
+  if (action === 'when') {
+    const v = prompt('Post at (YYYY-MM-DD HH:MM, Cairo time):');
+    if (!v) return;
+    const ts = Math.floor(new Date(v.replace(' ', 'T') + ':00').getTime() / 1000);
+    if (!ts) return toast('Could not parse that time');
+    return doAction(postId, 'at', btn, ts);
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await api(`/api/posts/${postId}/action`, { method:'POST', body: JSON.stringify({ action, when }) });
+    toast('Queued — the bot will handle it shortly');
+    setTimeout(loadTab, 1500);
+  } catch (e) { toast('Failed: ' + e.message); if (btn) btn.disabled = false; }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+async function openModal(p) {
+  const full = await api('/api/posts/' + p.id).catch(() => null);
+  const n = full ? full.slideCount : p.slides;
+  const modal = document.getElementById('modal');
+  let slidesHtml = '';
+  for (let i = 0; i < n; i++) slidesHtml += `<img src="${getApi()}/api/image/${p.id}/${i}?token=${encodeURIComponent(getToken())}">`;
+  modal.innerHTML = `
+    <div class="close"><button onclick="closeModal()">✕</button></div>
+    <div class="slides">${slidesHtml}</div>
+    <div class="body">
+      <div class="headline">${esc(p.headline)}</div>
+      <div class="caption">${esc(full && full.spec ? full.spec.caption : p.caption)}</div>
+      ${full && full.spec && full.spec.sources && full.spec.sources.length ? `<div class="meta">📰 ${full.spec.sources.map(s => esc(s.name)).join(', ')}</div>` : ''}
+    </div>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+
+async function renderIdeas() {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="idea-add">
+      <textarea id="idea-text" placeholder="New idea or request… e.g. 'do a post comparing Fit vs Rio prices'"></textarea>
+      <button onclick="addIdea()">Add</button>
+    </div>
+    <div id="idea-list"></div>
+  `;
+  try {
+    const ideas = await api('/api/ideas');
+    const list = document.getElementById('idea-list');
+    if (!ideas.length) { list.innerHTML = '<div class="empty">No ideas yet.</div>'; return; }
+    for (const idea of ideas) list.appendChild(ideaRow(idea));
+  } catch (e) { toast('Error: ' + e.message); }
+}
+const IDEA_STATUS_LABEL = { open:'💡 open', queued:'⏳ queued', working:'✍️ writing…', sent:'✅ sent', done:'✔️ done', dismissed:'🗑 dismissed' };
+function ideaRow(idea) {
+  const d = document.createElement('div'); d.className = 'idea-row';
+  d.innerHTML = `
+    <div class="meta">${IDEA_STATUS_LABEL[idea.status] || idea.status} · ${fmtDate(idea.created)}${idea.post_id ? ` · → post #${idea.post_id}` : ''}</div>
+    <div style="margin:6px 0">${esc(idea.text)}</div>
+    <div class="actions" style="padding:0">
+      ${idea.status === 'open' ? `<button class="primary" data-a="send">🚀 Send to bot</button>` : ''}
+      ${idea.status === 'open' ? `<button data-a="dismiss">🗑 Dismiss</button>` : ''}
+      ${['queued','working'].includes(idea.status) ? `<button disabled>⏳ in progress…</button>` : ''}
+      <button data-a="delete">✕ Delete</button>
+    </div>
+  `;
+  d.querySelector('[data-a="send"]')?.addEventListener('click', async e => { e.target.disabled = true; try { await api(`/api/ideas/${idea.id}/send`, { method:'POST' }); toast('Sent to the bot'); setTimeout(renderIdeas, 1000); } catch (err) { toast('Failed: ' + err.message); } });
+  d.querySelector('[data-a="dismiss"]')?.addEventListener('click', async () => { await api(`/api/ideas/${idea.id}`, { method:'PATCH', body: JSON.stringify({ status:'dismissed' }) }); renderIdeas(); });
+  d.querySelector('[data-a="delete"]')?.addEventListener('click', async () => { if (!confirm('Delete this idea?')) return; await api(`/api/ideas/${idea.id}`, { method:'DELETE' }); renderIdeas(); });
+  return d;
+}
+async function addIdea() {
+  const t = document.getElementById('idea-text'); const text = t.value.trim();
+  if (!text) return;
+  try { await api('/api/ideas', { method:'POST', body: JSON.stringify({ text }) }); t.value = ''; renderIdeas(); }
+  catch (e) { toast('Failed: ' + e.message); }
+}
+
+async function boot() {
+  if (!getApi() || !getToken()) return showSetup();
+  try { await api('/api/health'); } catch (e) { toast('Could not reach the API: ' + e.message); return showSetup(); }
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  renderTabs(); loadTab();
+}
+boot();
+</script>
+</body>
+</html>
